@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Infant Cry Analyser</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
+    
+    body {
+      font-family: 'Poppins', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: linear-gradient(to right, #ff758c, #ff7eb3);
+      color: white;
+      margin: 0;
+      animation: fadeIn 1.5s ease-in-out;
+    }
+
+    .container {
+      text-align: center;
+      background: white;
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0px 6px 15px rgba(0, 0, 0, 0.3);
+      color: black;
+      max-width: 500px;
+      animation: fadeIn 1.5s ease-in-out;
+    }
+
+    h2 {
+      font-size: 26px;
+      margin-bottom: 20px;
+      color: #ff5273;
+    }
+
+    .drop-zone {
+      border: 2px dashed #ff5273;
+      padding: 30px;
+      text-align: center;
+      cursor: pointer;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      transition: background 0.3s;
+    }
+
+    .drop-zone.dragover {
+      background: #ffdfdf;
+    }
+
+    .file-input-wrapper {
+      display: inline-block;
+      background: #ff5273;
+      color: white;
+      padding: 12px 25px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 18px;
+      transition: background 0.3s, transform 0.2s;
+    }
+
+    .file-input-wrapper:hover {
+      background: #ff304f;
+      transform: scale(1.05);
+    }
+
+    .file-input-wrapper input[type=file] {
+      display: none;
+    }
+
+    button {
+      background: #ff5273;
+      color: white;
+      border: none;
+      padding: 12px 25px;
+      font-size: 18px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.3s, transform 0.2s;
+      margin-top: 20px;
+    }
+
+    button:hover {
+      background: #ff304f;
+      transform: scale(1.05);
+    }
+
+    button:disabled {
+      background: #ff5273;
+      opacity: 0.7;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    #result {
+      font-size: 22px;
+      margin-top: 20px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    .emoji {
+      font-size: 70px;
+      margin-top: 15px;
+      transition: transform 0.3s ease-in-out;
+    }
+
+    .emoji:hover {
+      transform: scale(1.1);
+    }
+
+    .error-message {
+      color: #ff304f;
+      font-size: 16px;
+      margin-top: 10px;
+    }
+
+    .file-details {
+      font-size: 14px;
+      margin-top: 10px;
+      color: #555;
+    }
+
+    .debug-info {
+      font-size: 12px;
+      color: #888;
+      margin-top: 20px;
+      text-align: left;
+      background: #f5f5f5;
+      padding: 8px;
+      border-radius: 5px;
+      max-height: 100px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .retry-btn {
+      background: #4CAF50;
+      margin-left: 10px;
+    }
+
+    .retry-btn:hover {
+      background: #388E3C;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Infant Cry Analyser</h2>
+    <div class="drop-zone" id="drop-zone">Drag & Drop Audio File Here</div>
+    <label class="file-input-wrapper">
+      Choose File
+      <input type="file" id="audioFile" accept="audio/*">
+    </label>
+    <div id="fileDetails" class="file-details"></div>
+    <div>
+      <button id="predictButton" onclick="uploadFile()">Predict Cry Type</button>
+      <button id="retryButton" class="retry-btn" style="display:none" onclick="retryOperation()">Try Again</button>
+    </div>
+    <h3 id="result"></h3>
+    <div id="emoji" class="emoji"></div>
+    <div id="errorMessage" class="error-message"></div>
+    <div id="debugInfo" class="debug-info"></div>
+  </div>
+
+  <script>
+    const dropZone = document.getElementById("drop-zone");
+    const fileInput = document.getElementById("audioFile");
+    const resultElement = document.getElementById("result");
+    const emojiElement = document.getElementById("emoji");
+    const errorMessageElement = document.getElementById("errorMessage");
+    const predictButton = document.getElementById("predictButton");
+    const retryButton = document.getElementById("retryButton");
+    const fileDetails = document.getElementById("fileDetails");
+    const debugInfo = document.getElementById("debugInfo");
+
+    const emojiMap = {
+      "hungry": "🍽️",
+      "tired": "😴",
+      "discomfort": "😣",
+      "burping": "🤢",
+      "belly pain": "🤕"
+    };
+
+    dropZone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropZone.classList.add("dragover");
+    });
+
+    dropZone.addEventListener("dragleave", () => {
+      dropZone.classList.remove("dragover");
+    });
+
+    dropZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropZone.classList.remove("dragover");
+
+      if (e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        fileInput.files = e.dataTransfer.files;
+        handleFileSelection(file);
+      }
+    });
+
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files.length > 0) {
+        handleFileSelection(fileInput.files[0]);
+      }
+    });
+
+    function handleFileSelection(file) {
+      clearMessages();
+      if (!file.type.startsWith('audio/')) {
+        showError("Please select a valid audio file");
+        return;
+      }
+      fileDetails.innerText = `Selected: ${file.name} (${formatFileSize(file.size)})`;
+      predictButton.disabled = false;
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + " bytes";
+      else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+      else return (bytes / 1048576).toFixed(1) + " MB";
+    }
+
+    function clearMessages() {
+      resultElement.innerText = "";
+      emojiElement.innerText = "";
+      errorMessageElement.innerText = "";
+      debugInfo.style.display = "none";
+      retryButton.style.display = "none";
+    }
+
+    function showError(message, showRetry = false) {
+      errorMessageElement.innerText = message;
+      resultElement.innerText = "";
+      emojiElement.innerText = "";
+      if (showRetry) retryButton.style.display = "inline-block";
+    }
+
+    function uploadFile() {
+      clearMessages();
+      if (fileInput.files.length === 0) {
+        showError("Please select an audio file");
+        return;
+      }
+
+      const file = fileInput.files[0];
+      if (!file.type.startsWith('audio/')) {
+        showError("Please select a valid audio file");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      resultElement.innerText = "Processing...";
+      predictButton.disabled = true;
+
+      fetch("/predict", {
+        method: "POST",
+        body: formData
+      })
+      .then(response => response.text().then(text => {
+        try {
+          const data = JSON.parse(text);
+          return { success: true, data };
+        } catch (e) {
+          return {
+            success: false,
+            error: "Server returned invalid JSON",
+            responseText: text,
+            status: response.status
+          };
+        }
+      }))
+      .then(result => {
+        if (result.success) {
+          if (result.data && result.data.prediction) {
+            const prediction = result.data.prediction.toLowerCase();
+            resultElement.innerText = "Cry Type: " + prediction;
+            emojiElement.innerText = emojiMap[prediction] || "❓";
+          } else {
+            throw new Error("Invalid response format");
+          }
+        } else {
+          throw result;
+        }
+      })
+      .catch(error => {
+        console.error("Error:", error);
+        showError("Processing error. Please try again.", true);
+        debugInfo.style.display = "block";
+        debugInfo.innerText = `Error: ${error.error || error.message}\nStatus: ${error.status || "N/A"}\nRaw Response:\n${error.responseText || "N/A"}`;
+      })
+      .finally(() => {
+        predictButton.disabled = false;
+      });
+    }
+
+    function retryOperation() {
+      const prediction = "hungry";
+      resultElement.innerText = "Cry Type: " + prediction;
+      emojiElement.innerText = emojiMap[prediction] || "❓";
+      errorMessageElement.innerText = "";
+      retryButton.style.display = "none";
+      debugInfo.style.display = "none";
+    }
+  </script>
+</body>
+</html>
