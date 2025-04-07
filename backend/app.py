@@ -2,6 +2,7 @@ from flask import Flask, request, render_template, jsonify
 import os
 import numpy as np
 import pandas as pd
+import librosa
 import joblib
 from werkzeug.utils import secure_filename
 
@@ -9,17 +10,21 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Load model and encoder
-model = joblib.load("backend/cry_model_5.pkl")
-label_encoder = joblib.load("backend/label_encoder.pkl")
+# Lazy-load variables
+model = None
+label_encoder = None
+feature_columns = None
 
-# Load feature column names from training CSV
-df = pd.read_csv("backend/processed_audio_features.csv")
-feature_columns = df.drop(columns=["cry_type"]).columns
+def load_resources():
+    global model, label_encoder, feature_columns
+    if model is None or label_encoder is None or feature_columns is None:
+        model = joblib.load("backend/cry_model_5.pkl")
+        label_encoder = joblib.load("backend/label_encoder.pkl")
+        df = pd.read_csv("backend/processed_audio_features.csv")
+        feature_columns = df.drop(columns=["cry_type"]).columns
 
 # Feature extraction function (same as training)
 def extract_features(file_path):
-    import librosa
     y, sr = librosa.load(file_path, sr=None)
 
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
@@ -43,6 +48,8 @@ def index():
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    load_resources()  # Load models on-demand
+
     if 'file' not in request.files:
         return jsonify({'error': 'No file uploaded'}), 400
 
@@ -59,9 +66,11 @@ def predict():
         features_df = pd.DataFrame(features, columns=feature_columns)
         prediction_encoded = model.predict(features_df)[0]
         predicted_label = label_encoder.inverse_transform([prediction_encoded])[0]
+        os.remove(file_path)  # Clean up uploaded file
 
         return jsonify({'prediction': predicted_label})
     except Exception as e:
+        os.remove(file_path)  # Clean up on error
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
