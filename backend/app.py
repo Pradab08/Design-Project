@@ -2,7 +2,6 @@ from flask import Flask, request, render_template, jsonify
 import os
 import numpy as np
 import pandas as pd
-import librosa
 import joblib
 from werkzeug.utils import secure_filename
 
@@ -20,6 +19,7 @@ feature_columns = df.drop(columns=["cry_type"]).columns
 
 # Feature extraction function (same as training)
 def extract_features(file_path):
+    import librosa
     y, sr = librosa.load(file_path, sr=None)
 
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
